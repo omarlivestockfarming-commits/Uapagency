@@ -10,6 +10,14 @@ exports.handler = async (event) => {
   try {
     const { messages, systemPrompt } = JSON.parse(event.body);
 
+    if (!process.env.GROQ_API_KEY) {
+      console.error("GROQ_API_KEY is missing from environment variables");
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ reply: "Server is missing the API key configuration." })
+      };
+    }
+
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -18,7 +26,7 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
-        max_tokens: 300,
+        max_completion_tokens: 300,
         messages: [
           { role: "system", content: systemPrompt },
           ...messages
@@ -27,6 +35,16 @@ exports.handler = async (event) => {
     });
 
     const data = await response.json();
+
+    if (!response.ok) {
+      console.error("Groq API error:", JSON.stringify(data));
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reply: `Debug error from Groq: ${data?.error?.message || JSON.stringify(data)}` })
+      };
+    }
+
     const reply = data?.choices?.[0]?.message?.content || "Sorry, I didn't catch that — please message us on WhatsApp.";
 
     return {
@@ -35,9 +53,11 @@ exports.handler = async (event) => {
       body: JSON.stringify({ reply })
     };
   } catch (err) {
+    console.error("Function crashed:", err.message);
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Something went wrong" })
+      statusCode: 200,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reply: `Debug crash: ${err.message}` })
     };
   }
 };
